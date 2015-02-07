@@ -74,23 +74,23 @@ def process_file(filename_to_process, verbose):
         filename, file_extension = splitext(filename_to_process)
         for case in switch(file_extension.lower()):
             if case('.zip'):
-                if verbose: print + "    " + filename_to_process
+                if verbose: print "    " + filename_to_process
                 touch_file(filename_to_process, get_time_for_zipfile(filename_to_process))
                 break
             if case('.egg'):
-                if verbose: print + "    " + filename_to_process
+                if verbose: print "    " + filename_to_process
                 touch_file(filename_to_process, get_time_for_zipfile(filename_to_process))
                 break
             if case('.tar'):
-                if verbose: print + "    " + filename_to_process
+                if verbose: print "    " + filename_to_process
                 touch_file(filename_to_process, get_time_for_tarfile(filename_to_process))
                 break
             if case('.tar.gz'):
-                if verbose: print + "    " + filename_to_process
+                if verbose: print "    " + filename_to_process
                 touch_file(filename_to_process, get_time_for_tarfile(filename_to_process))
                 break
             if case('.tar.bz2'):
-                if verbose: print + "    " + filename_to_process
+                if verbose: print "    " + filename_to_process
                 touch_file(filename_to_process, get_time_for_tarfile(filename_to_process))
                 break
             # The reason the following cases are included but ignored is so that unhandled file
