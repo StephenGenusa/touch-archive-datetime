@@ -1,5 +1,10 @@
-import os, sys, time, datetime
-import tarfile, gzip, zipfile
+import os
+import sys
+import time
+import datetime
+import tarfile
+import gzip
+import zipfile
 
 
 ###############################################################
@@ -114,15 +119,16 @@ def process_file(filename_to_process, verbose):
         open("file_errors.txt", 'a').writelines('(empty file) ' + filename_to_process + '\n')
         
 
+def main(root_path):
+    for root, dirs, files in os.walk(root_path):
+        print 'Processing Path ' + root
+        for file in files:
+            process_file(root + "/" + file, False)
+    print "\nStephen's Archive Re-Touch Utility Complete\n"
+
+
 ##########################################
 # Change this later to a commandline param
 ##########################################
-root_path = '.'
-
-for root, dirs, files in os.walk(root_path):
-    print 'Processing Path ' + root
-    for file in files:
-        process_file(root + "/" + file, False)
-
-
-print "\nArchive Re-Touch Utility Complete\n"
+if __name__ == "__main__":
+    main(root_path='/Volumes/Python')
