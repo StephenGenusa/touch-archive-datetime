@@ -68,8 +68,8 @@ def touch_file(file_name, mod_time):
     """
     try:
         if not only_test_validity_of_archive :
-            # if mod_time is in a valid range 1980-01-01 to 2025-12-31
-            if mod_time > 315554400.0 and mod_time < 1767247140.0:
+            # if mod_time is in a valid range 1980-01-01 to Now [time.time()]
+            if mod_time > 315554400.0 and mod_time < time.time():
                 os.utime(file_name, ((mod_time,mod_time)))
                 log_info('  Touched  ' + file_name)
             else:
@@ -100,9 +100,9 @@ def get_time_for_tarfile(file_name):
                             newest_time = member.mtime
         except:
             log_info(file_name + ': ' + str(sys.exc_info()[0]))
-        return newest_time
     else:
         files_to_delete.append(file_name)
+    return newest_time
     
     
 def get_time_for_zipfile(file_name):
@@ -119,6 +119,7 @@ def get_time_for_zipfile(file_name):
                         newest_time = curDT
     except:
         log_info(file_name + ': ' + str(sys.exc_info()[0]))
+        files_to_delete.append(file_name)
     return newest_time
 
 
@@ -126,28 +127,35 @@ def touch_gem_file(file_name):
     """Gets the Ruby archive date/time found in metadata.gz and then touches
     the archive with that date/time   
     """
-    if tarfile.is_tarfile(file_name):
-        with tarfile.TarFile.open(file_name, 'r') as tarredFile:
-            members = tarredFile.getmembers()
-            for member in members:
-                if member.name == 'metadata.gz':
-                    try:
-                        tarredFile.extract(member, '/tmp')
-                        content = gzip.open('/tmp/metadata.gz','rb')
-                        metadata = content.read()
-                        os.remove('/tmp/metadata.gz')
-                        match = re.search("date:(.{0,50}?)\n", metadata, re.DOTALL | re.MULTILINE)
-                        if match:
-                            parsed_datetime = match.groups(0)[0]
-                        else:
-                            parsed_datetime = ''
-                        dt = dateutil.parser.parse(parsed_datetime)
-                        touch_file(file_name, time.mktime(dt.timetuple()))
-                    except:
-                        log_info(file_name + ': ' + str(sys.exc_info()[0]))
+    # Try and grab it from the file contents. Old gem files all have invalid
+    # date/times, apparently due to the gem package manager
+    tarfile_mod_time = get_time_for_tarfile(file_name)
+    if tarfile_mod_time > 0:
+        touch_file(file_name, tarfile_mod_time)
     else:
-        if delete_invalid_archives:
-            files_to_delete.append(file_name)
+        # Try and grab it from the metadata file
+        if tarfile.is_tarfile(file_name):
+            with tarfile.TarFile.open(file_name, 'r') as tarredFile:
+                members = tarredFile.getmembers()
+                for member in members:
+                    if member.name == 'metadata.gz':
+                        try:
+                            tarredFile.extract(member, '/tmp')
+                            content = gzip.open('/tmp/metadata.gz','rb')
+                            metadata = content.read()
+                            os.remove('/tmp/metadata.gz')
+                            match = re.search("date:(.{0,50}?)\n", metadata, re.DOTALL | re.MULTILINE)
+                            if match:
+                                parsed_datetime = match.groups(0)[0]
+                            else:
+                                parsed_datetime = ''
+                            dt = dateutil.parser.parse(parsed_datetime)
+                            touch_file(file_name, time.mktime(dt.timetuple()))
+                        except:
+                            log_info(file_name + ': ' + str(sys.exc_info()[0]))
+        else:
+            if delete_invalid_archives and files_to_delete.count(file_name) == 0:           
+                files_to_delete.append(file_name)
 
 
 def process_file(filename_to_process):
@@ -164,10 +172,10 @@ def process_file(filename_to_process):
             touch_file(filename_to_process, get_time_for_tarfile(filename_to_process))
         elif file_extension in ['.gem']:
             touch_gem_file(filename_to_process)
-        elif file_extension in ['', '.html', '.htm', '.txt', '.py', '.md5', '.pdf', '.png', '.jpg', '.doc', '.odt', '.docx']:
+        elif file_extension in ['', '.html', '.htm', '.txt', '.py', '.md5', '.pdf', '.png', '.jpg', '.doc', '.odt', '.docx', '.xml']:
             pass
         else:
-            log_info('Extension "' + file_extension + '" not handled.')
+            log_info('Extension "' + file_extension + '" not handled.', False)
     else:
         if file_extension in ['.zip', '.whl', '.egg', '.tar', '.tar.gz', 'tar.bz2', '.tgz', '.gem'] and delete_empty_files:
             log_info('Empty archive file deleted: ' + filename_to_process)
