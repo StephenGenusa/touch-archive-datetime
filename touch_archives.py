@@ -16,7 +16,7 @@ import dateutil.parser
 only_test_validity_of_archive = False
 delete_empty_files = True
 delete_invalid_archives = True
-datestamp_github_archive_filenames = False
+datestamp_github_archive_filenames = True
 files_to_delete = []
 
 
@@ -129,7 +129,7 @@ def rename_github_archives(file_name):
        touch_filename() should always be called first to make sure the archive
        has the correct datetime on it.
     """
-    for partial_filename in ['-master.zip', '-gh-pages.zip']:
+    for partial_filename in ['-master.zip', '-develop.zip', '-gh-pages.zip']:
         if partial_filename in file_name:
             mod_time = time.localtime(os.path.getmtime(file_name))
             time_stamp = time.strftime("%Y_%m_%d", mod_time)
@@ -230,12 +230,13 @@ def main(root_path):
         for file in files:
             process_file(root +'/' + file)
     if delete_invalid_archives and len(files_to_delete) > 0:
-        sys.stdout.write('*' * 80)
-        sys.stdout.write('* WARNING THE FOLLOWING FILES WILL BE DELETED:')
-        sys.stdout.write('*' * 80)
+        sys.stdout.write('\n' + '*' * 80)
+        sys.stdout.write('\n* WARNING THE FOLLOWING FILES WILL BE DELETED:')
+        sys.stdout.write('\n' + '*' * 80)
         for file_name in files_to_delete:
-            sys.stdout.write('* WARNING: Ready to DELETE', file_name)
-        sys.stdout.write('*' * 80)
+            sys.stdout.write('\n* WARNING: Ready to DELETE'+ file_name)
+        sys.stdout.write('\n' + '*' * 80)
+        sys.stdout.write('\n')
         answer = query_yes_no('DELETE ALL ' + str(len(files_to_delete)) + ' (APPARENTLY) INVALID FILES?', default="no")  
         if answer:
             try:
@@ -256,6 +257,7 @@ def main(root_path):
             log_info('NO file deletion has occurred')
     
     sys.stdout.write("\nStephen's Archive Re-Touch Utility Complete\n")
+
 
 
 ##########################################
