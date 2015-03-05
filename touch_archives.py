@@ -16,6 +16,7 @@ import dateutil.parser
 only_test_validity_of_archive = False
 delete_empty_files = True
 delete_invalid_archives = True
+datestamp_github_archive_filenames = False
 files_to_delete = []
 
 
@@ -123,17 +124,35 @@ def get_time_for_zipfile(file_name):
     return newest_time
 
 
-def touch_gem_file(file_name):
-    """Gets the Ruby archive date/time found in metadata.gz and then touches
-    the archive with that date/time   
+def rename_github_archives(file_name):
+    """Add a timestamp like 2015_03_01 to the filename of GitHub archives
+       touch_filename() should always be called first to make sure the archive
+       has the correct datetime on it.
     """
-    # Try and grab it from the file contents. Old gem files all have invalid
-    # date/times, apparently due to the gem package manager
+    for partial_filename in ['-master.zip', '-gh-pages.zip']:
+        if partial_filename in file_name:
+            mod_time = time.localtime(os.path.getmtime(file_name))
+            time_stamp = time.strftime("%Y_%m_%d", mod_time)
+            if time_stamp not in file_name: # file does not already have timestamp
+                new_file_name = file_name.replace('.zip', '') + \
+                    '_' + time_stamp + '.zip'
+                if not os.path.isfile(new_file_name):
+                    os.rename(file_name, new_file_name)
+                    print "  Archive renamed", new_file_name
+
+
+def touch_gem_file(file_name):
+    """Looks for a valid date/time in the Ruby archive file directory first, 
+       if not found it looks in metadata.gz second, and then touches the 
+       archive with that date/time   
+    """
+    # Try and grab the date/time from the file directory. Old gem files all 
+    # have invalid date/times, apparently due to the gem package manager
     tarfile_mod_time = get_time_for_tarfile(file_name)
     if tarfile_mod_time > 0:
         touch_file(file_name, tarfile_mod_time)
     else:
-        # Try and grab it from the metadata file
+        # Not found so try and grab it from the metadata file
         if tarfile.is_tarfile(file_name):
             with tarfile.TarFile.open(file_name, 'r') as tarredFile:
                 members = tarredFile.getmembers()
@@ -158,6 +177,25 @@ def touch_gem_file(file_name):
                 files_to_delete.append(file_name)
 
 
+def touch_ioc_file(file_name):
+    """Gets the author date/time found in the IOC file and then touches
+    the .ioc with that date/time   
+    www.openioc.com iocbucket.com
+    """
+    # Try and grab the date/time from the file contents.
+    try:
+        content = open(file_name,'rb').read()
+        match = re.search("<authored_date>(.{5,20}?)<", content, re.DOTALL | re.MULTILINE)
+        if match:
+            parsed_datetime = match.groups(0)[0]
+        else:
+            parsed_datetime = ''
+        dt = dateutil.parser.parse(parsed_datetime)
+        touch_file(file_name, time.mktime(dt.timetuple()))
+    except:
+        pass
+
+
 def process_file(filename_to_process):
     """Determines file extension; determines if it is a kind of file that the
     program can process and if so, calls the appropriate helper functions to
@@ -168,10 +206,14 @@ def process_file(filename_to_process):
     if os.path.getsize(filename_to_process) > 0:
         if file_extension in ['.zip', '.whl', '.egg']:
             touch_file(filename_to_process, get_time_for_zipfile(filename_to_process))
+            if file_extension == '.zip' and datestamp_github_archive_filenames:
+                rename_github_archives(filename_to_process)                
         elif file_extension in ['.tar', '.tar.gz', '.tar.bz2', '.tgz']:
             touch_file(filename_to_process, get_time_for_tarfile(filename_to_process))
         elif file_extension in ['.gem']:
             touch_gem_file(filename_to_process)
+        elif file_extension in ['.ioc']:
+            touch_ioc_file(filename_to_process)
         elif file_extension in ['', '.html', '.htm', '.txt', '.py', '.md5', '.pdf', '.png', '.jpg', '.doc', '.odt', '.docx', '.xml']:
             pass
         else:
@@ -214,7 +256,6 @@ def main(root_path):
             log_info('NO file deletion has occurred')
     
     sys.stdout.write("\nStephen's Archive Re-Touch Utility Complete\n")
-
 
 
 ##########################################
