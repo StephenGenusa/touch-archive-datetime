@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 
 
 import os
@@ -10,6 +10,9 @@ import gzip
 import zipfile
 import re
 import dateutil.parser
+
+# isoparser from https://github.com/barneygale/isoparser
+import isoparser
 
 # Can optionally use send2trash module if installed
 
@@ -129,7 +132,7 @@ def rename_github_archives(file_name):
        touch_filename() should always be called first to make sure the archive
        has the correct datetime on it.
     """
-    for partial_filename in ['-master.zip', '-develop.zip', '-gh-pages.zip']:
+    for partial_filename in ['-master.zip', '-develop.zip', '-devel.zip', '-gh-pages.zip']:
         if partial_filename in file_name:
             mod_time = time.localtime(os.path.getmtime(file_name))
             time_stamp = time.strftime("%Y_%m_%d", mod_time)
@@ -142,8 +145,8 @@ def rename_github_archives(file_name):
 
 
 def touch_gem_file(file_name):
-    """Looks for a valid date/time in the Ruby archive file directory first, 
-       if not found it looks in metadata.gz second, and then touches the 
+    """Looks for a valid date/time in the Ruby file archive directory first, 
+       if not found it looks in metadata.gz next, and then touches the 
        archive with that date/time   
     """
     # Try and grab the date/time from the file directory. Old gem files all 
@@ -195,6 +198,32 @@ def touch_ioc_file(file_name):
     except:
         pass
 
+def iso_parse_path_rec(parent_rec, latest_datetime):
+    for rec in parent_rec:
+        cur_datetime = dateutil.parser.parse(rec.datetime)
+        if rec.is_directory:
+            if cur_datetime > latest_datetime:
+                latest_datetime = cur_datetime
+            iso_parse_path_rec(rec.children,latest_datetime)
+        else:
+            if cur_datetime > latest_datetime:
+                latest_datetime = cur_datetime
+    return latest_datetime
+
+def touch_iso_file(file_name):
+    """Gets the latest date/time found in the ISO file and then touches the .iso 
+    with that date/time
+    """
+    # Try and grab the date/time from the file contents.
+    try:
+        iso = isoparser.parse(file_name)
+        early_datetime = datetime.datetime(1960,1,1,0,0)
+        isofile_mod_time = iso_parse_path_rec(iso.record().children, early_datetime)
+        if isofile_mod_time > early_datetime:
+            touch_file(file_name, time.mktime(isofile_mod_time.timetuple()))
+    except:
+        pass
+
 
 def process_file(filename_to_process):
     """Determines file extension; determines if it is a kind of file that the
@@ -214,6 +243,8 @@ def process_file(filename_to_process):
             touch_gem_file(filename_to_process)
         elif file_extension in ['.ioc']:
             touch_ioc_file(filename_to_process)
+        elif file_extension in ['.iso']:
+            touch_iso_file(filename_to_process)
         elif file_extension in ['', '.html', '.htm', '.txt', '.py', '.md5', '.pdf', '.png', '.jpg', '.doc', '.odt', '.docx', '.xml']:
             pass
         else:
@@ -257,7 +288,6 @@ def main(root_path):
             log_info('NO file deletion has occurred')
     
     sys.stdout.write("\nStephen's Archive Re-Touch Utility Complete\n")
-
 
 
 ##########################################
