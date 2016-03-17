@@ -10,9 +10,12 @@ import gzip
 import zipfile
 import re
 import dateutil.parser
+from dateutil.tz import tzutc, tzoffset
 
 # isoparser from https://github.com/barneygale/isoparser
 import isoparser
+from pdfminer.pdfparser import PDFParser
+from pdfminer.pdfdocument import PDFDocument
 
 # Can optionally use send2trash module if installed
 
@@ -224,11 +227,69 @@ def touch_iso_file(file_name):
     except:
         pass
 
+   
+    
+def transform_pdf_date(date_str):
+    """
+    Convert a pdf date such as "D:20120321183444+07'00'" into a usable datetime
+    http://www.verypdf.com/pdfinfoeditor/pdf-date-format.htm
+    (D:YYYYMMDDHHmmSSOHH'mm')
+    :param date_str: pdf date string
+    :return: datetime object
+    From http://stackoverflow.com/questions/16503075/convert-creationtime-of-pdf-to-a-readable-format-in-python
+    """
+    pdf_date_pattern = re.compile(''.join([
+        r"(D:)?",
+        r"(?P<year>\d\d\d\d)",
+        r"(?P<month>\d\d)",
+        r"(?P<day>\d\d)",
+        r"(?P<hour>\d\d)",
+        r"(?P<minute>\d\d)",
+        r"(?P<second>\d\d)",
+        r"(?P<tz_offset>[+-zZ])?",
+        r"(?P<tz_hour>\d\d)?",
+        r"'?(?P<tz_minute>\d\d)?'?"]))
+    match = re.match(pdf_date_pattern, date_str)
+    if match:
+        date_info = match.groupdict()
+
+        for k, v in date_info.iteritems():  # transform values
+            if v is None:
+                pass
+            elif k == 'tz_offset':
+                date_info[k] = v.lower()  # so we can treat Z as z
+            else:
+                date_info[k] = int(v)
+
+        if date_info['tz_offset'] in ('z', None):  # UTC
+            date_info['tzinfo'] = tzutc()
+        else:
+            multiplier = 1 if date_info['tz_offset'] == '+' else -1
+            date_info['tzinfo'] = tzoffset(None, multiplier*(3600 * date_info['tz_hour'] + 60 * date_info['tz_minute']))
+
+        for k in ('tz_offset', 'tz_hour', 'tz_minute'):  # no longer needed
+            del date_info[k]
+
+        return datetime.datetime(**date_info)
+
+    
+def touch_pdf_file(file_name):
+    with open(file_name, 'rb') as pdfFile:
+        pdf_parser = PDFParser(pdfFile)
+        pdf_doc = PDFDocument(pdf_parser)
+        if len(pdf_doc.info) and 'ModDate' in pdf_doc.info[0]:
+            pdf_mod_time = transform_pdf_date(pdf_doc.info[0]['ModDate'])
+            touch_file(file_name, time.mktime(pdf_mod_time.timetuple()))
+        else:
+            if len(pdf_doc.info) and 'CreationDate' in pdf_doc.info[0]:
+                pdf_mod_time = transform_pdf_date(pdf_doc.info[0]['CreationDate'])
+                touch_file(file_name, time.mktime(pdf_mod_time.timetuple()))
+
 
 def process_file(filename_to_process):
     """Determines file extension; determines if it is a kind of file that the
     program can process and if so, calls the appropriate helper functions to
-    get the date/time of the archive and then touch the file   
+    get the date/time of the archive/container and then touch the file   
     """
     filename, file_extension = splitext(filename_to_process)
     file_extension = file_extension.lower()
@@ -239,13 +300,15 @@ def process_file(filename_to_process):
                 rename_github_archives(filename_to_process)                
         elif file_extension in ['.tar', '.tar.gz', '.tar.bz2', '.tgz']:
             touch_file(filename_to_process, get_time_for_tarfile(filename_to_process))
+        elif file_extension in ['.pdf']:
+            touch_pdf_file(filename_to_process)
         elif file_extension in ['.gem']:
             touch_gem_file(filename_to_process)
         elif file_extension in ['.ioc']:
             touch_ioc_file(filename_to_process)
         elif file_extension in ['.iso']:
             touch_iso_file(filename_to_process)
-        elif file_extension in ['', '.html', '.htm', '.txt', '.py', '.md5', '.pdf', '.png', '.jpg', '.doc', '.odt', '.docx', '.xml']:
+        elif file_extension in ['', '.html', '.htm', '.txt', '.py', '.md5', '.png', '.jpg', '.doc', '.odt', '.docx', '.xml']:
             pass
         else:
             log_info('Extension "' + file_extension + '" not handled.', False)
