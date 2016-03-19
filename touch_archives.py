@@ -16,7 +16,17 @@ from dateutil.tz import tzutc, tzoffset
 import isoparser
 from pdfminer.pdfparser import PDFParser
 from pdfminer.pdfdocument import PDFDocument
-import exifread
+
+from hachoir_core.error import HachoirError
+from hachoir_core.cmd_line import unicodeFilename
+from hachoir_parser import createParser
+from hachoir_core.tools import makePrintable
+from hachoir_metadata import extractMetadata
+from hachoir_core.i18n import getTerminalCharset
+from hachoir_core import config as HachoirConfig
+
+# Deprecated
+#import exifread
 
 
 # Can optionally use send2trash module if installed
@@ -78,11 +88,12 @@ def touch_file(file_name, mod_time):
     try:
         if not only_test_validity_of_archive :
             # if mod_time is in a valid range 1980-01-01 to Now [time.time()]
-            if mod_time > 315554400.0 and mod_time < time.time():
-                os.utime(file_name, ((mod_time,mod_time)))
+            if mod_time > 315554400.0 and mod_time < time.time() and os.path.getmtime(file_name) <> mod_time:
+                os.utime(file_name, (mod_time,mod_time))
                 log_info('  Touched  ' + file_name)
             else:
-                log_info('  Skipped  ' + file_name)
+                if os.path.getmtime(file_name) <> mod_time:
+                    log_info('  Skipped  ' + file_name)
     except:
         pass
 
@@ -215,6 +226,7 @@ def iso_parse_path_rec(parent_rec, latest_datetime):
                 latest_datetime = cur_datetime
     return latest_datetime
 
+
 def touch_iso_file(file_name):
     """Gets the latest date/time found in the ISO file and then touches the .iso 
     with that date/time
@@ -229,7 +241,6 @@ def touch_iso_file(file_name):
     except:
         pass
 
-   
     
 def transform_pdf_date(date_str):
     """
@@ -288,15 +299,31 @@ def touch_pdf_file(file_name):
                 touch_file(file_name, time.mktime(pdf_mod_time.timetuple()))
 
 
-def touch_exif_file(file_name):
-    early_datetime = datetime.datetime(1960,1,1,0,0)
-    with open(file_name, 'rb') as exifFile:
-        tags = exifread.process_file(exifFile)
-        if len(tags) and 'EXIF DateTimeOriginal' in tags:
-            exif_mod_time = dateutil.parser.parse(str(tags['EXIF DateTimeOriginal']))
-            if exif_mod_time > early_datetime:            
-                touch_file(file_name, time.mktime(exif_mod_time.timetuple()))
+#def touch_exif_file(file_name):
+#    early_datetime = datetime.datetime(1960,1,1,0,0)
+#    with open(file_name, 'rb') as exifFile:
+#        tags = exifread.process_file(exifFile)
+#        if len(tags) and 'EXIF DateTimeOriginal' in tags:
+#            exif_mod_time = dateutil.parser.parse(str(tags['EXIF DateTimeOriginal']))
+#            if exif_mod_time > early_datetime:            
+#                touch_file(file_name, time.mktime(exif_mod_time.timetuple()))
 
+
+def touch_hachoir_parseable_file(file_name):
+    HachoirConfig.quiet = True
+    file_name, realname = unicodeFilename(file_name), file_name
+    parser = createParser(file_name, realname)
+    if parser:
+        try:
+            metadata = extractMetadata(parser)
+            if metadata and metadata.has("creation_date"):
+                mod_time = metadata.get("creation_date")
+                touch_file(file_name, time.mktime(mod_time.timetuple()))
+            #else:
+            #    log_info(' Metadata not found for file ' + file_name)
+        except ValueError:
+            return None
+    
 
 def process_file(filename_to_process):
     """Determines file extension; determines if it is a kind of file that the
@@ -312,8 +339,6 @@ def process_file(filename_to_process):
                 rename_github_archives(filename_to_process)                
         elif file_extension in ['.tar', '.tar.gz', '.tar.bz2', '.tgz']:
             touch_file(filename_to_process, get_time_for_tarfile(filename_to_process))
-        elif file_extension in ['.jpg', '.jpeg', '.wav', '.tif', '.tiff']:
-            touch_exif_file(filename_to_process)
         elif file_extension in ['.pdf']:
             touch_pdf_file(filename_to_process)
         elif file_extension in ['.gem']:
@@ -322,10 +347,10 @@ def process_file(filename_to_process):
             touch_ioc_file(filename_to_process)
         elif file_extension in ['.iso']:
             touch_iso_file(filename_to_process)
-        elif file_extension in ['', '.html', '.htm', '.txt', '.py', '.md5', '.png', '.doc', '.odt', '.xml']:
-            pass
         else:
-            log_info('Extension "' + file_extension + '" not handled.', False)
+            touch_hachoir_parseable_file(filename_to_process)
+        #else:
+        #    log_info('Extension "' + file_extension + '" not handled.', False)
     else:
         if file_extension in ['.zip', '.whl', '.egg', '.tar', '.tar.gz', 'tar.bz2', '.tgz', '.gem'] and delete_empty_files:
             log_info('Empty archive file deleted: ' + filename_to_process)
