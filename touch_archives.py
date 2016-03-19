@@ -16,6 +16,8 @@ from dateutil.tz import tzutc, tzoffset
 import isoparser
 from pdfminer.pdfparser import PDFParser
 from pdfminer.pdfdocument import PDFDocument
+import exifread
+
 
 # Can optionally use send2trash module if installed
 
@@ -286,6 +288,16 @@ def touch_pdf_file(file_name):
                 touch_file(file_name, time.mktime(pdf_mod_time.timetuple()))
 
 
+def touch_exif_file(file_name):
+    early_datetime = datetime.datetime(1960,1,1,0,0)
+    with open(file_name, 'rb') as exifFile:
+        tags = exifread.process_file(exifFile)
+        if len(tags) and 'EXIF DateTimeOriginal' in tags:
+            exif_mod_time = dateutil.parser.parse(str(tags['EXIF DateTimeOriginal']))
+            if exif_mod_time > early_datetime:            
+                touch_file(file_name, time.mktime(exif_mod_time.timetuple()))
+
+
 def process_file(filename_to_process):
     """Determines file extension; determines if it is a kind of file that the
     program can process and if so, calls the appropriate helper functions to
@@ -294,12 +306,14 @@ def process_file(filename_to_process):
     filename, file_extension = splitext(filename_to_process)
     file_extension = file_extension.lower()
     if os.path.getsize(filename_to_process) > 0:
-        if file_extension in ['.zip', '.whl', '.egg']:
+        if file_extension in ['.zip', '.whl', '.egg', '.docx']:
             touch_file(filename_to_process, get_time_for_zipfile(filename_to_process))
             if file_extension == '.zip' and datestamp_github_archive_filenames:
                 rename_github_archives(filename_to_process)                
         elif file_extension in ['.tar', '.tar.gz', '.tar.bz2', '.tgz']:
             touch_file(filename_to_process, get_time_for_tarfile(filename_to_process))
+        elif file_extension in ['.jpg', '.jpeg', '.wav', '.tif', '.tiff']:
+            touch_exif_file(filename_to_process)
         elif file_extension in ['.pdf']:
             touch_pdf_file(filename_to_process)
         elif file_extension in ['.gem']:
@@ -308,7 +322,7 @@ def process_file(filename_to_process):
             touch_ioc_file(filename_to_process)
         elif file_extension in ['.iso']:
             touch_iso_file(filename_to_process)
-        elif file_extension in ['', '.html', '.htm', '.txt', '.py', '.md5', '.png', '.jpg', '.doc', '.odt', '.docx', '.xml']:
+        elif file_extension in ['', '.html', '.htm', '.txt', '.py', '.md5', '.png', '.doc', '.odt', '.xml']:
             pass
         else:
             log_info('Extension "' + file_extension + '" not handled.', False)
@@ -351,6 +365,7 @@ def main(root_path):
             log_info('NO file deletion has occurred')
     
     sys.stdout.write("\nStephen's Archive Re-Touch Utility Complete\n")
+
 
 
 ##########################################
