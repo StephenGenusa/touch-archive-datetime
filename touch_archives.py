@@ -315,8 +315,11 @@ def touch_hachoir_parseable_file(file_name):
     parser = createParser(file_name, realname)
     if parser:
         try:
-            metadata = extractMetadata(parser)
-            if metadata and metadata.has("creation_date"):
+            metadata = extractMetadata(parser)            
+            if metadata and metadata.has("last_modification"):
+                mod_time = metadata.get("last_modification")
+                touch_file(file_name, time.mktime(mod_time.timetuple()))
+            elif metadata and metadata.has("creation_date"):
                 mod_time = metadata.get("creation_date")
                 touch_file(file_name, time.mktime(mod_time.timetuple()))
             #else:
