@@ -288,15 +288,18 @@ def transform_pdf_date(date_str):
     
 def touch_pdf_file(file_name):
     with open(file_name, 'rb') as pdfFile:
-        pdf_parser = PDFParser(pdfFile)
-        pdf_doc = PDFDocument(pdf_parser)
-        if len(pdf_doc.info) and 'ModDate' in pdf_doc.info[0]:
-            pdf_mod_time = transform_pdf_date(pdf_doc.info[0]['ModDate'])
-            touch_file(file_name, time.mktime(pdf_mod_time.timetuple()))
-        else:
-            if len(pdf_doc.info) and 'CreationDate' in pdf_doc.info[0]:
-                pdf_mod_time = transform_pdf_date(pdf_doc.info[0]['CreationDate'])
+        try:
+            pdf_parser = PDFParser(pdfFile)
+            pdf_doc = PDFDocument(pdf_parser)
+            if len(pdf_doc.info) and 'ModDate' in pdf_doc.info[0]:
+                pdf_mod_time = transform_pdf_date(pdf_doc.info[0]['ModDate'])
                 touch_file(file_name, time.mktime(pdf_mod_time.timetuple()))
+            else:
+                if len(pdf_doc.info) and 'CreationDate' in pdf_doc.info[0]:
+                    pdf_mod_time = transform_pdf_date(pdf_doc.info[0]['CreationDate'])
+                    touch_file(file_name, time.mktime(pdf_mod_time.timetuple()))
+        except:
+            pass
 
 
 #def touch_exif_file(file_name):
@@ -396,8 +399,12 @@ def main(root_path):
 
 
 
-##########################################
-# Change this later to a command-line param
-##########################################
 if __name__ == "__main__":
-    main(root_path='/data/rubygems/gems')
+    if len(sys.argv):
+        start_path = sys.argv[1]
+    else:
+        start_path = "not_specified"
+    if os.path.exists(start_path):
+        main(start_path)
+    else:
+        print "Starting path", start_path, "not found"
