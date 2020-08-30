@@ -1,5 +1,9 @@
 #!/usr/bin/env python
 
+# *************************************************
+# touch_archive by Stephen Genusa
+# written 2016-2020
+# *************************************************
 
 import os
 import sys
@@ -12,24 +16,16 @@ import re
 import dateutil.parser
 from dateutil.tz import tzutc, tzoffset
 
-# isoparser from https://github.com/barneygale/isoparser
-import isoparser
-from pdfminer.pdfparser import PDFParser
-from pdfminer.pdfdocument import PDFDocument
+import isoparser # isoparser from https://github.com/barneygale/isoparser
+from pdfrw import PdfReader
 
-from hachoir_core.error import HachoirError
-from hachoir_core.cmd_line import unicodeFilename
-from hachoir_parser import createParser
-from hachoir_core.tools import makePrintable
-from hachoir_metadata import extractMetadata
-from hachoir_core.i18n import getTerminalCharset
-from hachoir_core import config as HachoirConfig
-
-# Deprecated
-#import exifread
-
-
+from hachoir.parser import createParser
+from hachoir.core.tools import makePrintable
+from hachoir.metadata import extractMetadata
+from hachoir.core.i18n import getTerminalCharset
+from hachoir.core import config as HachoirConfig
 # Can optionally use send2trash module if installed
+
 
 only_test_validity_of_archive = False
 delete_empty_files = True
@@ -88,11 +84,11 @@ def touch_file(file_name, mod_time):
     try:
         if not only_test_validity_of_archive :
             # if mod_time is in a valid range 1980-01-01 to Now [time.time()]
-            if mod_time > 315554400.0 and mod_time < time.time() and os.path.getmtime(file_name) <> mod_time:
+            if mod_time > 315554400.0 and mod_time < time.time() and os.path.getmtime(file_name) != mod_time:
                 os.utime(file_name, (mod_time,mod_time))
                 log_info('  Touched  ' + file_name)
             else:
-                if os.path.getmtime(file_name) <> mod_time:
+                if os.path.getmtime(file_name) != mod_time:
                     log_info('  Skipped  ' + file_name)
     except:
         pass
@@ -102,7 +98,7 @@ def log_info(message, display_error=True):
     """Logs information to a file and optionally displays it to the screen
     """
     if display_error:
-        print message
+        print(message)
     open("file_errors.txt", 'a').writelines(message + "\n")
    
 
@@ -157,7 +153,7 @@ def rename_github_archives(file_name):
                     '_' + time_stamp + '.zip'
                 if not os.path.isfile(new_file_name):
                     os.rename(file_name, new_file_name)
-                    print "  Archive renamed", new_file_name
+                    print("  Archive renamed", new_file_name)
 
 
 def touch_gem_file(file_name):
@@ -266,7 +262,7 @@ def transform_pdf_date(date_str):
     if match:
         date_info = match.groupdict()
 
-        for k, v in date_info.iteritems():  # transform values
+        for k, v in date_info.items():  # transform values
             if v is None:
                 pass
             elif k == 'tz_offset':
@@ -285,20 +281,45 @@ def transform_pdf_date(date_str):
 
         return datetime.datetime(**date_info)
 
+
+def touch_pdf_file2(file_name):
+    from pdfminer.pdfparser import PDFParser
+    from pdfminer.pdfdocument import PDFDocument
+    with open(file_name, 'rb') as pdfFile:
+        pdf_parser = PDFParser(pdfFile)
+        pdf_doc = PDFDocument(pdf_parser)
+        pdf_mod_time = None
+        if pdf_doc.info[0] and 'ModDate' in pdf_doc.info[0]:
+            pdf_mod_time = transform_pdf_date(pdf_doc.info[0]['ModDate'].decode('ascii'))
+            touch_file(file_name, time.mktime(pdf_mod_time.timetuple()))
+        else:
+            if pdf_doc.info[0] and 'CreationDate' in pdf_doc.info[0]:
+                pdf_mod_time = transform_pdf_date(pdf_doc.info[0]['CreationDate'].decode('ascii'))
+                touch_file(file_name, time.mktime(pdf_mod_time.timetuple()))
+        if not pdf_mod_time:
+            #print("Mod time not found in touch_pdf_file2", file_name)
+            pass
+
     
 def touch_pdf_file(file_name):
-    with open(file_name, 'rb') as pdfFile:
+    try:
+        pdf_info = PdfReader(file_name).Info
+        pdf_mod_time = pdf_info['/ModDate']
+        if not pdf_mod_time:
+            pdf_mod_time = pdf_info['/CreationDate']
+        if pdf_mod_time:
+            pdf_mod_time = str(pdf_mod_time)
+            pdf_mod_time= pdf_mod_time.replace('(', '').replace(')', '')
+            pdt = transform_pdf_date(pdf_mod_time)
+            if pdt:
+                touch_file(file_name, time.mktime(pdt.timetuple()))
+        if not pdf_mod_time:
+            #print("Mod time not found in touch_pdf_file", file_name)
+            touch_pdf_file2(file_name)
+    except:
         try:
-            pdf_parser = PDFParser(pdfFile)
-            pdf_doc = PDFDocument(pdf_parser)
-            if len(pdf_doc.info) and 'ModDate' in pdf_doc.info[0]:
-                pdf_mod_time = transform_pdf_date(pdf_doc.info[0]['ModDate'])
-                touch_file(file_name, time.mktime(pdf_mod_time.timetuple()))
-            else:
-                if len(pdf_doc.info) and 'CreationDate' in pdf_doc.info[0]:
-                    pdf_mod_time = transform_pdf_date(pdf_doc.info[0]['CreationDate'])
-                    touch_file(file_name, time.mktime(pdf_mod_time.timetuple()))
-        except:
+            touch_pdf_file2(file_name)
+        except Exception as e:
             pass
 
 
@@ -314,11 +335,11 @@ def touch_pdf_file(file_name):
 
 def touch_hachoir_parseable_file(file_name):
     HachoirConfig.quiet = True
-    file_name, realname = unicodeFilename(file_name), file_name
-    parser = createParser(file_name, realname)
+    parser = createParser(file_name)
     if parser:
         try:
-            metadata = extractMetadata(parser)            
+            metadata = extractMetadata(parser)
+            #print(metadata)
             if metadata and metadata.has("last_modification"):
                 mod_time = metadata.get("last_modification")
                 touch_file(file_name, time.mktime(mod_time.timetuple()))
@@ -367,7 +388,7 @@ def main(root_path):
     for root, dirs, files in os.walk(root_path):
         log_info('Processing Path ' + root)
         for file in files:
-            process_file(root +'/' + file)
+            process_file(os.path.join(root, file))
     if delete_invalid_archives and len(files_to_delete) > 0:
         sys.stdout.write('\n' + '*' * 80)
         sys.stdout.write('\n* WARNING THE FOLLOWING FILES WILL BE DELETED:')
@@ -398,13 +419,13 @@ def main(root_path):
     sys.stdout.write("\nStephen's Archive Re-Touch Utility Complete\n")
 
 
-
 if __name__ == "__main__":
-    if len(sys.argv):
+    if len(sys.argv) > 1:
         start_path = sys.argv[1]
     else:
-        start_path = "not_specified"
+        print("Starting path not specified")
+        sys.exit()
     if os.path.exists(start_path):
         main(start_path)
     else:
-        print "Starting path", start_path, "not found"
+        print("Starting path", start_path, "not found")
