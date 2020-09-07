@@ -1,0 +1,4 @@
+python-dateutil~=2.8.1
+isoparser~=0.3
+pdfrw~=0.4
+hachoir~=3.1.1
