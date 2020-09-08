@@ -99,7 +99,10 @@ def log_info(message, display_error=True):
     """
     if display_error:
         print(message)
-    open("file_errors.txt", 'a').writelines(message + "\n")
+    try:
+        open("file_errors.txt", 'a').writelines(message + "\n")
+    except:
+        pass
    
 
 def get_time_for_tarfile(file_name):
@@ -388,7 +391,10 @@ def main(root_path):
     for root, dirs, files in os.walk(root_path):
         log_info('Processing Path ' + root)
         for file in files:
-            process_file(os.path.join(root, file))
+            try:
+                process_file(os.path.join(root, file))
+            except:
+                pass
     if delete_invalid_archives and len(files_to_delete) > 0:
         sys.stdout.write('\n' + '*' * 80)
         sys.stdout.write('\n* WARNING THE FOLLOWING FILES WILL BE DELETED:')
